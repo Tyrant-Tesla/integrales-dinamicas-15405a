@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Math Particles 2D/3D — Arte Matemático</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;background:#07070f;color:#dfe6ff;font-family:system-ui,sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+.ui{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);padding:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;pointer-events:none}
+.ui>*{pointer-events:auto}
+button{background:#151a33cc;color:#dfe6ff;border:1px solid #3a4580;border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer}
+button.on{background:#5b6cff;border-color:#9aa5ff}
+.sep{width:12px}
+#info{position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom,0px);padding:12px;text-align:center;font-size:13px;pointer-events:none;background:linear-gradient(transparent,#07070fdd)}
+#info b{display:block;letter-spacing:2px;font-size:12px;color:#9aa5ff}
+#info i{opacity:.7;font-size:12px}
+
+#calc{position:fixed;right:10px;top:calc(env(safe-area-inset-top,0px) + 96px);width:min(330px,92vw);max-height:58vh;overflow:auto;background:#10142bee;border:1px solid #3a4580;border-radius:12px;padding:12px;display:none;font-size:13px;box-sizing:border-box}
+#calc h3{margin:0 0 8px;font-size:13px;letter-spacing:1px;color:#9aa5ff}
+#calc label{display:block;margin:6px 0 2px;opacity:.8}
+#calc input{width:100%;box-sizing:border-box;background:#07070f;color:#dfe6ff;border:1px solid #3a4580;border-radius:6px;padding:7px;font-size:14px;font-family:ui-monospace,monospace}
+#calc .row{display:flex;gap:6px}#calc .row>div{flex:1}
+#calc .ch{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+#calc .ch button{padding:3px 7px;font-size:11px;font-family:ui-monospace,monospace}
+#res{margin-top:8px;line-height:1.7;font-family:ui-monospace,monospace;word-break:break-all}
+#res .err{color:#ff8a8a}#res b{color:#9aa5ff}
+</style></head><body>
+<canvas id="c"></canvas>
+<video id="cam" playsinline muted style="display:none;position:fixed;left:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);width:130px;border-radius:8px;transform:scaleX(-1);opacity:.85;pointer-events:none;border:1px solid #3a4580"></video>
+<div class="ui" id="ui"></div>
+<div id="info"><div id="cs" style="font-size:12px;color:#ffd27a;margin-bottom:2px"></div><b id="t"></b><span id="f"></span><br><i>Arrastra: rotar (3D) / mover (2D) · Rueda o pellizco: zoom · Mantén clic/toque: empujar · Teclas 0 2 3 4 5 · D: 2D/3D · ∫ Calculadora · 📷 Cámara (mano derecha: dedos = figura; izquierda: puño empuja, pellizco = zoom)</i></div>
+<div id="calc"><h3>∫ CALCULADORA DE INTEGRALES</h3>
+<div id="cn" style="opacity:.75;font-size:11px;margin-bottom:4px"></div><label>f(x) =</label><input id="fx" value="exp(-x^2/2)" autocomplete="off" spellcheck="false">
+<div class="row"><div><label>a (inferior)</label><input id="ia" value="-3"></div><div><label>b (superior)</label><input id="ib" value="3"></div></div>
+<div class="ch" id="ex"></div>
+<div class="row"><button id="go" style="flex:1">Calcular</button><button id="gr" style="flex:1">Graficar sólido</button></div>
+<div id="res"></div>
+<div style="opacity:.6;font-size:11px;margin-top:6px">Usa x, pi, e, + − * / ^, sin cos tan asin acos atan sinh cosh tanh exp ln log sqrt abs. Ej: 2x*sin(x). Resultado numérico (Simpson).</div></div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H,DPR=Math.min(devicePixelRatio||1,2);
+function rs(){W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',rs);rs();
+const N=7000,R=Math.random;
+const shapes={
+ 0:{n:'SÓLIDO DE REVOLUCIÓN',c:['exp(-x^2/2)','-3','3','Perfil y = e^(−x²/2), girado alrededor del eje x.'],f:'y = e^(−x²/2) rotada alrededor del eje x',g(){const x=(R()*2-1)*3.2,r=Math.exp(-x*x/2),a=R()*6.2832;return[x*1.1,r*Math.cos(a)*1.6,r*Math.sin(a)*1.6]}},
+ 2:{n:'TORO',c:['sqrt(abs(0.64-(x-2)^2))','1.2','2.8','Semicírculo generador (R=2, r=0.8). Área = πr²/2; por Pappus, volumen del toro = 2πR·πr².'],f:'(R + r·cos v)·cos u , (R + r·cos v)·sin u , r·sin v',g(){const u=R()*6.2832,v=R()*6.2832;return[(2+.8*Math.cos(v))*Math.cos(u),(2+.8*Math.cos(v))*Math.sin(u),.8*Math.sin(v)]}},
+ 3:{n:'BANDA DE MÖBIUS',c:['sin(x/2)','0','2*pi','Altura z del borde (v=1): z = sin(u/2), con u de 0 a 2π (una vuelta de la banda).'],f:'x=(2+v·cos(u/2))cos u , y=(2+v·cos(u/2))sin u , z=v·sin(u/2)',g(){const u=R()*6.2832,v=R()*2-1;return[(2+v*Math.cos(u/2))*Math.cos(u),(2+v*Math.cos(u/2))*Math.sin(u),v*Math.sin(u/2)]}},
+ 4:{n:'ATRACTOR DE LORENZ',c:['3x^2/8','-sqrt(72)','sqrt(72)','Nulclina de z en el plano x=y: z = x²/β, entre los puntos fijos x = ±√(β(ρ−1)).'],f:'dx=σ(y−x) · dy=x(ρ−z)−y · dz=xy−βz',pts:null,g(){if(!this.pts){const p=[];let x=.1,y=0,z=0;for(let i=0;i<N*3;i++){const dt=.006,dx=10*(y-x),dy=x*(28-z)-y,dz=x*y-8/3*z;x+=dx*dt;y+=dy*dt;z+=dz*dt;if(i>500)p.push([x*.11,y*.11,(z-25)*.11])}this.pts=p}return this.pts[(R()*this.pts.length)|0]}},
+ 5:{n:'ONDA 3D',c:['cos(2x)*exp(-x^2/4)','0','5','Perfil radial z(r) con x = r. Al girarlo se obtiene la onda completa.'],f:'z = cos(2r)·e^(−r²/4) , r = √(x²+y²)',g(){const x=(R()*2-1)*5,y=(R()*2-1)*5,r=Math.hypot(x,y);return[x*.55,y*.55,Math.cos(2*r)*Math.exp(-r*r/4)*1.8]}}
+};
+const P=[];for(let i=0;i<N;i++)P.push({x:(R()-.5)*8,y:(R()-.5)*8,z:(R()-.5)*8,vx:0,vy:0,vz:0,tx:0,ty:0,tz:0,h:0});
+let cur=0,mode3=true,ry=.6,rx=.35,tRy=.6,tRx=.35,zoom=1,panX=0,panY=0,auto=true;
+function setShape(k){cur=k;const s=shapes[k];if(s.c){fx.value=s.c[0];ia.value=s.c[1];ib.value=s.c[2];cn.textContent=s.c[3];if(document.getElementById('calc').style.display=='block')calcular()}for(const p of P){const q=s.g.call(s);p.tx=q[0];p.ty=q[1];p.tz=q[2]}
+ document.getElementById('t').textContent=s.n;document.getElementById('f').textContent=s.f;
+ [...document.querySelectorAll('[data-s]')].forEach(b=>b.classList.toggle('on',b.dataset.s==k))}
+function setMode(m){mode3=m;auto=m;if(!m){tRy=0;tRx=0}else{tRy=ry+.0;tRx=.35}
+ document.getElementById('b3').classList.toggle('on',m);document.getElementById('b2').classList.toggle('on',!m);
+ document.getElementById('pl').style.display=m?'none':'flex'}
+const ui=document.getElementById('ui');
+function btn(t,fn,attr){const b=document.createElement('button');b.textContent=t;b.onclick=fn;if(attr)b.dataset.s=attr;ui.appendChild(b);return b}
+[[0,'0 Revolución'],[2,'2 Toro'],[3,'3 Möbius'],[4,'4 Lorenz'],[5,'5 Onda']].forEach(([k,t])=>btn(t,()=>setShape(k),k));
+ui.appendChild(Object.assign(document.createElement('span'),{className:'sep'}));
+btn('3D',()=>setMode(true)).id='b3';btn('2D',()=>setMode(false)).id='b2';
+const pl=document.createElement('span');pl.id='pl';pl.style.cssText='display:none;gap:6px';ui.appendChild(pl);
+[['Plano XY',0,0],['XZ',0,1.5708],['YZ',1.5708,0]].forEach(([t,a,b])=>{const e=document.createElement('button');e.textContent=t;e.onclick=()=>{tRy=a;tRx=b};pl.appendChild(e)});
+btn('Reiniciar vista',()=>{zoom=1;panX=panY=0});
+// input
+let down=false,mx=-999,my=-999,lx=0,ly=0,drag=false,moved=0;const ptrs=new Map();let pd=0;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);down=true;lx=e.clientX;ly=e.clientY;moved=0;mx=e.clientX;my=e.clientY;
+ if(ptrs.size==2){const a=[...ptrs.values()];pd=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1])}});
+cv.addEventListener('pointermove',e=>{mx=e.clientX;my=e.clientY;if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+ if(ptrs.size==2){const a=[...ptrs.values()],d=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);zoom=Math.max(.2,Math.min(6,zoom*d/pd));pd=d;moved=99;return}
+ const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;moved+=Math.abs(dx)+Math.abs(dy);
+ if(drag||moved>6){drag=true;if(mode3){ry+=dx*.008;rx+=dy*.008;tRy=ry;tRx=rx;auto=false}else{panX+=dx;panY+=dy}}});
+const up=e=>{ptrs.delete(e.pointerId);if(!ptrs.size){down=false;drag=false}};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('pointerleave',()=>{if(!down){mx=-999}});
+cv.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.2,Math.min(6,zoom*(e.deltaY<0?1.1:.91)))},{passive:false});
+addEventListener('keydown',e=>{if(e.target.tagName=='INPUT')return;if('02345'.includes(e.key)&&e.key)setShape(+e.key);if(e.key=='d'||e.key=='D')setMode(!mode3);if(e.key=='+')zoom*=1.1;if(e.key=='-')zoom/=1.1});
+function frame(){
+ requestAnimationFrame(frame);
+ if(mode3&&auto){tRy+=.004;ry=tRy}
+ ry+=(tRy-ry)*.08;rx+=(tRx-rx)*.08;
+ const cy=Math.cos(ry),sy=Math.sin(ry),cx=Math.cos(rx),sx=Math.sin(rx);
+ const sc=Math.min(W,H)/7*zoom,t=performance.now()*.001;
+ ctx.globalCompositeOperation='source-over';ctx.fillStyle='rgba(7,7,15,.28)';ctx.fillRect(0,0,W,H);
+ ctx.globalCompositeOperation='lighter';
+ const rad=90;
+ for(const p of P){
+  // rotate: first around y, then x
+  let x1=p.x*cy+p.z*sy,z1=-p.x*sy+p.z*cy,y1=p.y*cx-z1*sx,z2=p.y*sx+z1*cx;
+  const f=mode3?5/(5+z2*.55+.0001):1;
+  const X=W/2+panX+x1*sc*f,Y=H/2+panY-y1*sc*f;
+  // force to target
+  p.vx+=(p.tx-p.x)*.012;p.vy+=(p.ty-p.y)*.012;p.vz+=(p.tz-p.z)*.012;
+  if(down&&!drag&&moved<=6||camPush||(mx>-900&&!down)){
+   const dx=X-mx,dy=Y-my,d2=dx*dx+dy*dy;
+   if(d2<rad*rad){const d=Math.sqrt(d2)+1,k=(1-d/rad)*(down||camPush?1.1:.3),ux=dx/d*k,uy=-dy/d*k;
+    const y0=uy*cx,z0=uy*sx;const px=ux*cy-z0*sy,pz=ux*sy+z0*cy;
+    p.vx+=px;p.vy+=y0;p.vz+=pz}}
+  p.vx*=.86;p.vy*=.86;p.vz*=.86;p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
+  const hue=(200+ (mode3?z2:p.z)*35+ p.x*12 + t*10)%360;
+  ctx.fillStyle=`hsla(${hue},90%,${mode3?55+z2*6:60}%,${mode3?.55+Math.max(-.3,Math.min(.4,-z2*.1)):.6})`;
+  const s=mode3?1.3*f+.4:1.6;ctx.fillRect(X,Y,s,s);
+ }
+ if(!mode3){ctx.strokeStyle='rgba(120,140,255,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,H/2+panY);ctx.lineTo(W,H/2+panY);ctx.moveTo(W/2+panX,0);ctx.lineTo(W/2+panX,H);ctx.stroke()}
+}
+
+// ===== Calculadora de integrales =====
+function compile(src){
+ const T=[];const re=/\s*(\d*\.?\d+(?:[eE][+-]?\d+)?|[A-Za-z_]\w*|[-+*/^(),])/y;let m,i=0;
+ src=src.replace(/\*\*/g,'^').replace(/π/g,'pi');
+ while(i<src.length){re.lastIndex=i;m=re.exec(src);if(!m){if(/^\s*$/.test(src.slice(i)))break;throw Error('Carácter no válido: '+src.slice(i).trim()[0])}T.push(m[1]);i=re.lastIndex}
+ let k=0;const F={sin:Math.sin,cos:Math.cos,tan:Math.tan,asin:Math.asin,acos:Math.acos,atan:Math.atan,sinh:Math.sinh,cosh:Math.cosh,tanh:Math.tanh,exp:Math.exp,ln:Math.log,log:Math.log10,sqrt:Math.sqrt,abs:Math.abs};
+ const isNum=t=>t&&/^[\d.]/.test(t),isId=t=>t&&/^[A-Za-z_]/.test(t);
+ function expr(){let a=term();while(T[k]=='+'||T[k]=='-'){const o=T[k++],b=term(),l=a;a=o=='+'?x=>l(x)+b(x):x=>l(x)-b(x)}return a}
+ function term(){let a=unary();for(;;){if(T[k]=='*'||T[k]=='/'){const o=T[k++],b=unary(),l=a;a=o=='*'?x=>l(x)*b(x):x=>l(x)/b(x)}
+  else if(isNum(T[k])||isId(T[k])||T[k]=='('){const b=unary(),l=a;a=x=>l(x)*b(x)}else return a}}
+ function unary(){if(T[k]=='-'){k++;const a=unary();return x=>-a(x)}if(T[k]=='+'){k++;return unary()}return pow()}
+ function pow(){const a=atom();if(T[k]=='^'){k++;const b=unary(),l=a;return x=>Math.pow(l(x),b(x))}return a}
+ function atom(){const t=T[k++];if(t===undefined)throw Error('Expresión incompleta');
+  if(isNum(t)){const v=parseFloat(t);return()=>v}
+  if(t=='('){const a=expr();if(T[k++]!=')')throw Error('Falta )');return a}
+  if(isId(t)){const n=t.toLowerCase();
+   if(n=='x')return x=>x;if(n=='pi')return()=>Math.PI;if(n=='e')return()=>Math.E;
+   if(F[n]){if(T[k]!='(')throw Error('Falta ( después de '+n);k++;const a=expr();if(T[k++]!=')')throw Error('Falta )');const f=F[n];return x=>f(a(x))}
+   throw Error('Desconocido: '+t)}
+  throw Error('Inesperado: '+t)}
+ const f=expr();if(k<T.length)throw Error('Sobra: '+T[k]);return f}
+function simpson(g,a,b,n){const h=(b-a)/n;let s=g(a)+g(b);for(let i=1;i<n;i++)s+=g(a+i*h)*(i%2?4:2);return s*h/3}
+function integ(g,a,b){if(a===b)return 0;const s1=simpson(g,a,b,2000),s2=simpson(g,a,b,4000);if(!isFinite(s2))throw Error('La función no es finita en [a,b] (¿singularidad?)');return{v:s2,err:Math.abs(s2-s1)/15}}
+const fmt=v=>Math.abs(v)<1e-12?'0':(Math.abs(v)>=1e6||Math.abs(v)<1e-4?v.toExponential(6):(+v.toPrecision(10)).toString());
+function readCalc(){const f=compile(document.getElementById('fx').value);const a=compile(document.getElementById('ia').value)(0),b=compile(document.getElementById('ib').value)(0);
+ if(!isFinite(a)||!isFinite(b))throw Error('Límites no válidos');return{f,a,b}}
+function calcular(){const o=document.getElementById('res');try{
+ let{f,a,b}=readCalc();let sg=1;if(a>b){[a,b]=[b,a];sg=-1}
+ const I=integ(f,a,b),V=integ(x=>Math.PI*f(x)**2,a,b),h=1e-5,L=integ(x=>Math.sqrt(1+((f(x+h)-f(x-h))/(2*h))**2),a,b);
+ o.innerHTML='<b>∫ f dx</b> = '+fmt(sg*I.v)+' <span style="opacity:.5">(±'+I.err.toExponential(1)+')</span><br><b>Volumen</b> π∫f² dx = '+fmt(V.v)+'<br><b>Long. de arco</b> = '+fmt(L.v)
+ }catch(e){o.innerHTML='<span class="err">'+e.message+'</span>'}}
+function graficar(){const o=document.getElementById('res');try{
+ let{f,a,b}=readCalc();if(a>b)[a,b]=[b,a];if(a===b)throw Error('a y b deben ser distintos');
+ let mx=0;const pts=[];for(let i=0;i<=400;i++){const x=a+(b-a)*i/400,y=f(x);if(isFinite(y))mx=Math.max(mx,Math.abs(y));pts.push(y)}
+ if(!mx)throw Error('La función es 0 o no es finita');
+ const sc=Math.min(6.4/(b-a),3/mx),mid=(a+b)/2;
+ shapes[6]={n:'SÓLIDO DE REVOLUCIÓN (TU f)',f:'y = '+document.getElementById('fx').value+' en ['+fmt(a)+', '+fmt(b)+'], eje x',
+  g(){for(let t=0;t<30;t++){const x=a+R()*(b-a),y=f(x);if(isFinite(y)&&R()*mx<=Math.abs(y)+mx*.04){const r=Math.abs(y)*sc,u=R()*6.2832;return[(x-mid)*sc,r*Math.cos(u),r*Math.sin(u)]}}return[(R()-.5)*(b-a)*sc,0,0]}};
+ setShape(6);cn.textContent='Función personalizada.';calcular()}catch(e){o.innerHTML='<span class="err">'+e.message+'</span>'}}
+document.getElementById('go').onclick=calcular;document.getElementById('gr').onclick=graficar;
+[['e^(-x²/2)','exp(-x^2/2)',-3,3],['x²','x^2',0,2],['sen x','sin(x)',0,'pi'],['1/x','1/x',1,'e'],['√x','sqrt(x)',0,4]].forEach(([t,f,a,b])=>{const e=document.createElement('button');e.textContent=t;e.onclick=()=>{fx.value=f;ia.value=a;ib.value=b;calcular()};document.getElementById('ex').appendChild(e)});
+['fx','ia','ib'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key=='Enter')calcular()}));
+const cb=btn('∫ Calculadora',()=>{const p=document.getElementById('calc');const on=p.style.display!='block';p.style.display=on?'block':'none';cb.classList.toggle('on',on);if(on)calcular()});
+
+// ===== Cámara (MediaPipe Hands) =====
+let camPush=false,camOn=false,hands=null,sel=-1,selN=0;
+const vid=document.getElementById('cam'),cs=document.getElementById('cs'),MP='https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+const ld=src=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.crossOrigin='anonymous';e.onload=ok;e.onerror=()=>no(Error('no se pudo cargar el modelo'));document.head.appendChild(e)});
+const dst=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const fingers=l=>[[8,6],[12,10],[16,14],[20,18]].filter(([t,p])=>dst(l[t],l[0])>dst(l[p],l[0])*1.08).length;
+const thumbOut=l=>dst(l[4],l[17])>dst(l[3],l[17])*1.05;
+function onHands(r){let pushed=false,seen=0;const L=r.multiHandLandmarks||[],H=r.multiHandedness||[];
+ L.forEach((l,i)=>{seen++;const right=H[i].label==='Left'; // la imagen no está espejada: 'Left' = mano derecha real
+  if(right){const k=fingers(l)+(thumbOut(l)?1:0);
+   if(shapes[k]&&k!==cur){if(k===sel)selN++;else{sel=k;selN=1}if(selN>=6){setShape(k);selN=0}}else if(k===cur)selN=0}
+  else{if(fingers(l)==0){camPush=true;pushed=true;mx=(1-l[9].x)*W;my=l[9].y*H}
+   else{const d=dst(l[4],l[8]);const z=.4+Math.min(1,Math.max(0,(d-.02)/.2))*2.6;zoom+=(z-zoom)*.25}}});
+ if(!pushed&&camPush){camPush=false;mx=-999}
+ cs.textContent=seen?'':'Cámara activa: muestra tus manos'}
+async function loopCam(){while(camOn){try{if(vid.readyState>=2)await hands.send({image:vid})}catch(e){camErr(e);return}await new Promise(r=>requestAnimationFrame(r))}}
+function camErr(e){stopCam();cs.textContent='No se pudo usar la cámara: '+(e&&(e.message||e.name)||'error')+'. Si ves esto en la vista previa de Claude, el permiso o la descarga del modelo pueden estar bloqueados: abre el archivo en tu propio sitio (https) o en un servidor local.'}
+function stopCam(){camOn=false;camPush=false;camBtn.classList.remove('on');const s=vid.srcObject;if(s)s.getTracks().forEach(t=>t.stop());vid.srcObject=null;vid.style.display='none'}
+async function startCam(){if(camOn){stopCam();cs.textContent='';return}
+ try{cs.textContent='Solicitando cámara…';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw Error('el navegador no permite cámara aquí');
+  vid.srcObject=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});
+  await vid.play();vid.style.display='block';cs.textContent='Cargando modelo de manos…';
+  if(!window.Hands)await ld(MP+'hands.js');
+  hands=new Hands({locateFile:f=>MP+f});hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.6,minTrackingConfidence:.5});hands.onResults(onHands);
+  await hands.initialize();camOn=true;camBtn.classList.add('on');cs.textContent='Cámara activa: muestra tus manos';loopCam()
+ }catch(e){camErr(e)}}
+const camBtn=btn('📷 Cámara',startCam);
+setShape(0);setMode(true);frame();
+</script></body></html>
